@@ -1,47 +1,61 @@
 package main
 
 import (
-	"errors"
 	"strings"
+	"unicode/utf8"
 )
 
 type Location struct {
-	line   uint32
-	column uint32
+	line   uint
+	column uint
 }
 
-const (
-	KEYWORD_SELECT = "SELECT"
-	KEYWORD_FROM   = "FROM"
-	KEYWORD_INSERT = "INSERT"
-	KEYWORD_INTO   = "INTO"
-	KEYWORD_VALUES = "VALUES"
-	KEYWORD_INT    = "INT"
-	KEYWORD_TEXT   = "TEXT"
-)
-
-var KEYWORDS = [...]string{KEYWORD_SELECT, KEYWORD_FROM, KEYWORD_INSERT, KEYWORD_INTO, KEYWORD_VALUES, KEYWORD_INT, KEYWORD_TEXT}
+type Symbol rune
 
 const (
-	SYMBOL_SEMI         byte = ';'
-	SYMBOL_ASTERISK     byte = '*'
-	SYMBOL_COMMA        byte = ','
-	SYMBOL_LEFT_PAREN   byte = '('
-	SYMBOL_RIGHT_PAREN  byte = ')'
-	SYMBOL_SINGLE_QUOTE byte = '\''
-	SYMBOL_SPACE        byte = ' '
-	SYMBOL_UNDERSCORE   byte = '_'
+	SYMBOL_EOF          rune   = -1
+	SYMBOL_SEMI_COLON   Symbol = ';'
+	SYMBOL_COMMA        Symbol = ','
+	SYMBOL_LEFT_PAREN   Symbol = '('
+	SYMBOL_RIGHT_PAREN  Symbol = ')'
+	SYMBOL_SINGLE_QUOTE Symbol = '\''
+	SYMBOL_UNDERSCORE   Symbol = '_'
 )
+
+type Keyword string
+
+const (
+	KEYWORD_CREATE Keyword = "CREATE"
+	KEYWORD_TABLE  Keyword = "TABLE"
+	KEYWORD_INT    Keyword = "INT"
+	KEYWORD_TEXT   Keyword = "TEXT"
+)
+
+var KEYWORDS = [...]Keyword{KEYWORD_CREATE, KEYWORD_TABLE, KEYWORD_INT, KEYWORD_TEXT}
+
+var DATA_TYPES = [...]Keyword{KEYWORD_INT, KEYWORD_TEXT}
 
 type TokenType uint
 
 const (
-	TOKEN_KEYWORD TokenType = iota
-	TOKEN_SYMBOL
+	TOKEN_SYMBOL TokenType = iota
+	TOKEN_KEYWORD
 	TOKEN_IDENTIFIER
-	TOKEN_STRING
 	TOKEN_INT
+	TOKEN_TEXT
 )
+
+func is_whitespace(char rune) bool {
+	return char == ' '
+}
+
+func is_alphabetical(char rune) bool {
+	return (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || char == '_'
+}
+
+func is_digit(char rune) bool {
+	return char >= '0' && char <= '9'
+}
 
 type Token struct {
 	_type    TokenType
@@ -49,103 +63,142 @@ type Token struct {
 	location Location
 }
 
+func (token *Token) is_keyword(keyword Keyword) bool {
+	return token._type == TOKEN_KEYWORD && token.value == string(keyword)
+}
+
+func (token *Token) is_symbol(symbol Symbol) bool {
+	return token._type == TOKEN_SYMBOL && token.value == string(symbol)
+}
+
+func (token *Token) is_data_type() bool {
+	if token._type == TOKEN_KEYWORD {
+		for _, data_type := range DATA_TYPES {
+			if token.value == string(data_type) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 type Cursor struct {
-	pointer  uint32
+	index    int
 	location Location
 }
 
 func (cursor *Cursor) increment() {
-	cursor.pointer++
+	cursor.index++
 	cursor.location.column++
 }
 
-func (cursor *Cursor) new_line() {
-	cursor.pointer++
-	cursor.location.line++
-	cursor.location.column = 0
-}
-
-func lex(source string) ([]*Token, error) {
-	tokens := []*Token{}
+func Lex(source string) []Token {
+	// @Optimization Could we use some sort of arena-style preallocation to avoid using append?
+	var tokens []Token
 	cursor := Cursor{}
 
-	for cursor.pointer < uint32(len(source)) {
-		char := source[cursor.pointer]
+	for {
+		char := next_rune(source, cursor.index)
+		if char == SYMBOL_EOF {
+			break
+		}
 
-		switch char {
-		case SYMBOL_SPACE:
+		if is_whitespace(char) {
 			cursor.increment()
 			continue
-		case SYMBOL_SEMI, SYMBOL_ASTERISK, SYMBOL_COMMA, SYMBOL_LEFT_PAREN, SYMBOL_RIGHT_PAREN:
-			tokens = append(tokens, &Token{_type: TOKEN_SYMBOL, value: string(char), location: cursor.location})
+		}
+
+		switch Symbol(char) {
+		case SYMBOL_SEMI_COLON, SYMBOL_COMMA, SYMBOL_LEFT_PAREN, SYMBOL_RIGHT_PAREN:
+			tokens = append(tokens, Token{_type: TOKEN_SYMBOL, value: string(char), location: cursor.location})
 			cursor.increment()
 		case SYMBOL_SINGLE_QUOTE:
-			token, err := lex_string(source, &cursor)
-			if err != nil {
-				return nil, err
-			}
+			token, _ := lex_text(source, &cursor)
 			tokens = append(tokens, token)
 		default:
-			if is_digit(char) {
-				token, err := lex_number(source, &cursor)
-				if err != nil {
-					return nil, err
-				}
+			switch {
+			case is_digit(char):
+				token, _ := lex_number(source, &cursor)
 				tokens = append(tokens, token)
-			} else if is_alpha(char) {
-				start_cursor := cursor
-				token, err := lex_keyword(source, &cursor)
-				if err != nil {
-					cursor = start_cursor
-					token, err = lex_identifier(source, &cursor)
-					if err != nil {
-						return nil, err
-					}
+			case is_alphabetical(char):
+				init_cursor := cursor
+				token, ok := lex_keyword(source, &cursor)
+
+				if !ok {
+					cursor = init_cursor
+					token = lex_identifier(source, &cursor)
 				}
+
 				tokens = append(tokens, token)
 			}
 		}
 	}
 
-	return tokens, nil
+	return tokens
 }
 
-func lex_string(source string, cursor *Cursor) (*Token, error) {
-	start_location := cursor.location
+func next_rune(source string, index int) rune {
+	if index >= len(source) {
+		return SYMBOL_EOF
+	}
+
+	char := rune(source[index])
+
+	if char >= utf8.RuneSelf {
+		panic("Source must be UTF-8 encoded!")
+	}
+
+	return char
+}
+
+func lex_text(source string, cursor *Cursor) (Token, error) {
+	init_cursor := *cursor
 
 	cursor.increment()
 
-	var builder strings.Builder
+	for cursor.index < len(source) {
+		char := next_rune(source, cursor.index)
 
-	for cursor.pointer < uint32(len(source)) {
-		char := source[cursor.pointer]
-
-		if char == SYMBOL_SINGLE_QUOTE {
+		if Symbol(char) == SYMBOL_SINGLE_QUOTE {
 			cursor.increment()
-			return &Token{_type: TOKEN_STRING, value: builder.String(), location: start_location}, nil
+			return Token{TOKEN_TEXT, source[init_cursor.index+1 : cursor.index-1], init_cursor.location}, nil
 		}
 
-		builder.WriteByte(char)
 		cursor.increment()
 	}
 
-	return nil, errors.New("error parsing string: " + builder.String())
+	panic("Error lexing text!")
 }
 
-func lex_number(source string, cursor *Cursor) (*Token, error) {
-	start_location := cursor.location
+func lex_number(source string, cursor *Cursor) (Token, error) {
+	init_cursor := *cursor
 
-	var builder strings.Builder
+	for cursor.index < len(source) {
+		char := next_rune(source, cursor.index)
 
-	for cursor.pointer < uint32(len(source)) {
-		char := source[cursor.pointer]
-
-		if char == SYMBOL_SPACE {
+		if is_whitespace(char) {
 			break
 		}
 
 		if is_digit(char) {
-			builder.WriteByte(char)
+			cursor.increment()
+			continue
+		}
+
+		panic("Error lexing number!")
+	}
+
+	return Token{TOKEN_INT, source[init_cursor.index:cursor.index], init_cursor.location}, nil
+}
+
+func lex_keyword(source string, cursor *Cursor) (Token, bool) {
+	init_cursor := *cursor
+
+	for cursor.index < len(source) {
+		char := next_rune(source, cursor.index)
+
+		if is_alphabetical(char) {
 			cursor.increment()
 			continue
 		}
@@ -153,54 +206,23 @@ func lex_number(source string, cursor *Cursor) (*Token, error) {
 		break
 	}
 
-	return &Token{_type: TOKEN_INT, value: builder.String(), location: start_location}, nil
-}
-
-func lex_keyword(source string, cursor *Cursor) (*Token, error) {
-	start_location := cursor.location
-
-	var builder strings.Builder
-
-	for cursor.pointer < uint32(len(source)) {
-		char := source[cursor.pointer]
-
-		if char == SYMBOL_SPACE {
-			break
-		}
-
-		if is_alpha(char) {
-			builder.WriteByte(char)
-			cursor.increment()
-			continue
-		}
-
-		return nil, errors.New("error parsing keyword: " + source[start_location.column:cursor.pointer+1])
-	}
-
-	value := builder.String()
+	value := source[init_cursor.index:cursor.index]
 	for _, keyword := range KEYWORDS {
-		if strings.EqualFold(value, keyword) {
-			return &Token{_type: TOKEN_KEYWORD, value: keyword, location: start_location}, nil
+		if strings.EqualFold(value, string(keyword)) {
+			return Token{TOKEN_KEYWORD, string(keyword), init_cursor.location}, true
 		}
 	}
 
-	return nil, errors.New("unknown keyword: " + value)
+	return Token{}, false
 }
 
-func lex_identifier(source string, cursor *Cursor) (*Token, error) {
-	start_location := cursor.location
+func lex_identifier(source string, cursor *Cursor) Token {
+	init_cursor := *cursor
 
-	if !is_alpha(source[start_location.column]) {
-		return nil, errors.New("error parsing identifier: must start with an alphabetical character")
-	}
+	for cursor.index < len(source) {
+		char := next_rune(source, cursor.index)
 
-	var builder strings.Builder
-
-	for cursor.pointer < uint32(len(source)) {
-		char := source[cursor.pointer]
-
-		if is_alpha(char) || is_digit(char) || char == SYMBOL_UNDERSCORE {
-			builder.WriteByte(char)
+		if is_alphabetical(char) || is_digit(char) {
 			cursor.increment()
 			continue
 		}
@@ -208,13 +230,5 @@ func lex_identifier(source string, cursor *Cursor) (*Token, error) {
 		break
 	}
 
-	return &Token{_type: TOKEN_IDENTIFIER, value: builder.String(), location: start_location}, nil
-}
-
-func is_digit(char byte) bool {
-	return char >= '0' && char <= '9'
-}
-
-func is_alpha(char byte) bool {
-	return (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z')
+	return Token{TOKEN_IDENTIFIER, source[init_cursor.index:cursor.index], init_cursor.location}
 }

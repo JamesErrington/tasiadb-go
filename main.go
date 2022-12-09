@@ -8,6 +8,7 @@ import (
 )
 
 func main() {
+
 	scanner := bufio.NewScanner(os.Stdin)
 
 	for {
@@ -35,12 +36,15 @@ func do_meta_command(command string) {
 }
 
 func do_sql_command(command string) {
-	tokens, err := lex(command)
-	if err != nil {
-		panic(err)
-	}
+	tokens := Lex(command)
 
 	for _, token := range tokens {
 		fmt.Println(token)
+	}
+
+	ast := Parse(tokens)
+
+	for _, statement := range ast.statements {
+		fmt.Println(*statement.create_table_statement)
 	}
 }
