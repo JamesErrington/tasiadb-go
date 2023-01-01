@@ -1,8 +1,8 @@
-build:
-	go build -o bin/tasiadb .
+GO_FLAGS   = 
+EXECUTABLE = tasiadb
+
+main.go:
+	go build $(GO_FLAGS) -o bin/$(EXECUTABLE) src/main.go
 
 run:
-	go run .
-
-test:
-	go test
+	go run src/main.go

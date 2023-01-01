@@ -1,24 +1,30 @@
-package main
+package cli
 
 import (
 	"bufio"
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/JamesErrington/tasiadb/src/lexer"
 )
 
-func main() {
+const (
+	META_CHAR    = "."
+	EXIT_COMMAND = "exit"
+)
 
+func RunRepl() {
 	scanner := bufio.NewScanner(os.Stdin)
 
 	for {
-		fmt.Print("tasiadb> ")
+		print("tasiadb> ")
 
 		scanner.Scan()
 		input := scanner.Text()
 
-		if strings.HasPrefix(input, ".") {
-			do_meta_command(input)
+		if strings.HasPrefix(input, META_CHAR) {
+			do_meta_command(input[1:])
 			continue
 		}
 
@@ -28,7 +34,7 @@ func main() {
 
 func do_meta_command(command string) {
 	switch command {
-	case ".exit":
+	case EXIT_COMMAND:
 		os.Exit(0)
 	default:
 		fmt.Println("Error: unknown command or invalid arguments: ", command)
@@ -36,15 +42,7 @@ func do_meta_command(command string) {
 }
 
 func do_sql_command(command string) {
-	tokens := Lex(command)
-
-	for _, token := range tokens {
-		fmt.Println(token)
-	}
-
-	ast := Parse(tokens)
-
-	for _, statement := range ast.statements {
-		fmt.Println(*statement.create_table_statement)
-	}
+	lexer := lexer.NewLexer(command)
+	tokens := lexer.Lex()
+	fmt.Println(tokens)
 }
