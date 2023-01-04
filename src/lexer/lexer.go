@@ -1,7 +1,6 @@
 package lexer
 
 import (
-	"fmt"
 	"strings"
 	"unicode/utf8"
 )
@@ -18,6 +17,9 @@ const (
 	SYMBOL_UNDERSCORE   Symbol = '_'
 	SYMBOL_ASTERISK     Symbol = '*'
 	SYMBOL_DOT          Symbol = '.'
+	SYMBOL_SPACE        Symbol = ' '
+	SYMBOL_TAB          Symbol = '\t'
+	SYMBOL_NEWLINE      Symbol = '\n'
 )
 
 type Keyword string
@@ -40,25 +42,24 @@ const (
 type TokenType uint8
 
 const (
-	TOKEN_SYMBOL TokenType = iota
+	TOKEN_ERROR TokenType = iota
+	TOKEN_EOF
+
 	TOKEN_KEYWORD
+	TOKEN_SYMBOL
+
 	TOKEN_IDENTIFIER
 	TOKEN_NUMBER_LITERAL
 	TOKEN_TEXT_LITERAL
-	TOKEN_EOF
 )
 
 func is_whitespace(char rune) bool {
-	switch char {
-	case ' ', '\n', '\t':
+	switch Symbol(char) {
+	case SYMBOL_SPACE, SYMBOL_NEWLINE, SYMBOL_TAB:
 		return true
 	default:
 		return false
 	}
-}
-
-func is_eof(char rune) bool {
-	return char == rune(SYMBOL_EOF)
 }
 
 func is_alphabetical(char rune) bool {
@@ -82,13 +83,21 @@ func to_upper_rune(char rune) rune {
 }
 
 type Token struct {
-	_type  TokenType
-	value  string
-	offset int
+	Type   TokenType
+	Value  string
+	Offset int
 }
 
 func (token Token) IsType(token_type TokenType) bool {
-	return token._type == token_type
+	return token.Type == token_type
+}
+
+func (token Token) IsSymbol(symbol Symbol) bool {
+	return token.IsType(TOKEN_SYMBOL) && token.Value == string(symbol)
+}
+
+func (token Token) IsKeyword(keyword Keyword) bool {
+	return token.IsType(TOKEN_KEYWORD) && token.Value == string(keyword)
 }
 
 type Lexer struct {
@@ -98,47 +107,16 @@ type Lexer struct {
 	start         int
 }
 
-type LexerError struct {
-	message string
-	index   int
-}
-
-func (lexer *Lexer) throw_error(message string) {
-	panic(LexerError{message, lexer.index})
-}
-
-func (lexer *Lexer) handle_error() {
-	if err := recover(); err != nil {
-		if le, ok := err.(LexerError); ok {
-			lexeme := string(lexer.source[le.index])
-			fmt.Printf("Lexer error near \"%v\": %v\n", lexeme, le.message)
-			fmt.Printf("%s\n", lexer.source)
-			if le.index < 15 {
-				fmt.Printf("%*v\n", le.index+15, "^--- error here")
-			} else {
-				fmt.Printf("%*v\n", le.index+1, "error here ---^")
-			}
-		} else {
-			panic(err)
-		}
-	}
-}
-
 func NewLexer(source string) *Lexer {
 	return &Lexer{source, len(source), -1, 0}
 }
 
-func (lexer *Lexer) Lex() []Token {
-	defer lexer.handle_error()
-
-	var tokens []Token
-
-	for lexer.index = -1; ; {
+func (lexer *Lexer) NextToken() (Token, bool) {
+	for lexer.index < lexer.source_length {
 		char := lexer.next_rune()
 
-		if is_eof(char) {
-			tokens = append(tokens, Token{TOKEN_EOF, "", lexer.index})
-			return tokens
+		if char < rune(SYMBOL_EOF) || char > utf8.MaxRune {
+			return Token{TOKEN_ERROR, string(char), lexer.index}, false
 		}
 
 		if is_whitespace(char) {
@@ -146,29 +124,33 @@ func (lexer *Lexer) Lex() []Token {
 		}
 
 		switch Symbol(char) {
+		case SYMBOL_EOF:
+			return Token{TOKEN_EOF, "", lexer.index}, false
 		case
 			SYMBOL_SEMI_COLON,
 			SYMBOL_COMMA,
 			SYMBOL_LEFT_PAREN,
 			SYMBOL_RIGHT_PAREN,
 			SYMBOL_ASTERISK:
-			tokens = append(tokens, Token{TOKEN_SYMBOL, string(char), lexer.index})
+			return Token{TOKEN_SYMBOL, string(char), lexer.index}, false
 		case SYMBOL_SINGLE_QUOTE:
 			token := lexer.lex_text()
-			tokens = append(tokens, token)
+			return token, false
 		default:
 			switch {
 			case is_digit(char) || char == rune(SYMBOL_DOT):
 				token := lexer.lex_number()
-				tokens = append(tokens, token)
+				return token, false
 			case is_alphabetical(char):
 				token := lexer.lex_keyword_or_identifier()
-				tokens = append(tokens, token)
+				return token, false
 			default:
-				lexer.throw_error("Unexpected token")
+				return Token{TOKEN_ERROR, "Unidentified token", lexer.index}, false
 			}
 		}
 	}
+
+	return Token{}, true
 }
 
 func (lexer *Lexer) next_rune() rune {
@@ -180,10 +162,6 @@ func (lexer *Lexer) next_rune() rune {
 
 	char := rune(lexer.source[lexer.index])
 
-	if char < 0 || char >= utf8.RuneSelf {
-		lexer.throw_error("Encountered non UTF-8 character")
-	}
-
 	return char
 }
 
@@ -191,29 +169,32 @@ func (lexer *Lexer) lex_number() Token {
 	lexer.start = lexer.index
 	lexer.index -= 1
 	seen_dot := false
+	has_error := false
 
 	for lexer.index < lexer.source_length {
 		char := lexer.next_rune()
 
-		if is_digit(char) {
-			continue
-		}
-
 		if char == rune(SYMBOL_DOT) {
 			if seen_dot {
-				lexer.throw_error("Invalid numeric literal")
+				has_error = true
 			}
 
 			seen_dot = true
 			continue
 		}
 
-		lexer.index -= 1
-		break
+		if !is_digit(char) {
+			lexer.index -= 1
+			break
+		}
 	}
 
 	if seen_dot && lexer.index == lexer.start {
-		lexer.throw_error("Invalid numeric literal")
+		has_error = true
+	}
+
+	if has_error {
+		return Token{TOKEN_ERROR, "Invalid number literal", lexer.start}
 	}
 
 	return Token{TOKEN_NUMBER_LITERAL, lexer.source[lexer.start : lexer.index+1], lexer.start}
@@ -233,8 +214,7 @@ func (lexer *Lexer) lex_text() Token {
 	}
 
 	lexer.index -= 1
-	lexer.throw_error("Non-terminated text literal")
-	panic("")
+	return Token{TOKEN_ERROR, "Non-terminated text literal", lexer.index}
 }
 
 func (lexer *Lexer) lex_keyword_or_identifier() Token {
