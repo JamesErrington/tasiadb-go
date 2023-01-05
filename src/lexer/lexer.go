@@ -1,42 +1,22 @@
 package lexer
 
 import (
-	"strings"
 	"unicode/utf8"
 )
 
-type Symbol rune
-
 const (
-	SYMBOL_EOF          Symbol = -1
-	SYMBOL_SEMI_COLON   Symbol = ';'
-	SYMBOL_COMMA        Symbol = ','
-	SYMBOL_LEFT_PAREN   Symbol = '('
-	SYMBOL_RIGHT_PAREN  Symbol = ')'
-	SYMBOL_SINGLE_QUOTE Symbol = '\''
-	SYMBOL_UNDERSCORE   Symbol = '_'
-	SYMBOL_ASTERISK     Symbol = '*'
-	SYMBOL_DOT          Symbol = '.'
-	SYMBOL_SPACE        Symbol = ' '
-	SYMBOL_TAB          Symbol = '\t'
-	SYMBOL_NEWLINE      Symbol = '\n'
-)
-
-type Keyword string
-
-const (
-	KEYWORD_CREATE  Keyword = "CREATE"
-	KEYWORD_TABLE   Keyword = "TABLE"
-	KEYWORD_NUMBER  Keyword = "NUMBER"
-	KEYWORD_TEXT    Keyword = "TEXT"
-	KEYWORD_BOOLEAN Keyword = "BOOLEAN"
-	KEYWORD_INSERT  Keyword = "INSERT"
-	KEYWORD_INTO    Keyword = "INTO"
-	KEYWORD_VALUES  Keyword = "VALUES"
-	KEYWORD_TRUE    Keyword = "TRUE"
-	KEYWORD_FALSE   Keyword = "FALSE"
-	KEYWORD_SELECT  Keyword = "SELECT"
-	KEYWORD_FROM    Keyword = "FROM"
+	SYMBOL_EOF          = -1
+	SYMBOL_SEMI_COLON   = ';'
+	SYMBOL_COMMA        = ','
+	SYMBOL_LEFT_PAREN   = '('
+	SYMBOL_RIGHT_PAREN  = ')'
+	SYMBOL_SINGLE_QUOTE = '\''
+	SYMBOL_UNDERSCORE   = '_'
+	SYMBOL_ASTERISK     = '*'
+	SYMBOL_DOT          = '.'
+	SYMBOL_SPACE        = ' '
+	SYMBOL_TAB          = '\t'
+	SYMBOL_NEWLINE      = '\n'
 )
 
 type TokenType uint8
@@ -45,16 +25,32 @@ const (
 	TOKEN_ERROR TokenType = iota
 	TOKEN_EOF
 
-	TOKEN_KEYWORD
-	TOKEN_SYMBOL
+	TOKEN_SEMI_COLON
+	TOKEN_COMMA
+	TOKEN_LEFT_PAREN
+	TOKEN_RIGHT_PAREN
+	TOKEN_ASTERISK
+
+	TOKEN_KEYWORD_CREATE
+	TOKEN_KEYWORD_TABLE
+	TOKEN_KEYWORD_NUMBER
+	TOKEN_KEYWORD_TEXT
+	TOKEN_KEYWORD_BOOLEAN
+	TOKEN_KEYWORD_INSERT
+	TOKEN_KEYWORD_INTO
+	TOKEN_KEYWORD_VALUES
+	TOKEN_KEYWORD_TRUE
+	TOKEN_KEYWORD_FALSE
+	TOKEN_KEYWORD_SELECT
+	TOKEN_KEYWORD_FROM
 
 	TOKEN_IDENTIFIER
-	TOKEN_NUMBER_LITERAL
-	TOKEN_TEXT_LITERAL
+	TOKEN_LITERAL_NUMBER
+	TOKEN_LITERAL_TEXT
 )
 
 func is_whitespace(char rune) bool {
-	switch Symbol(char) {
+	switch char {
 	case SYMBOL_SPACE, SYMBOL_NEWLINE, SYMBOL_TAB:
 		return true
 	default:
@@ -83,21 +79,21 @@ func to_upper_rune(char rune) rune {
 }
 
 type Token struct {
-	Type   TokenType
-	Value  string
-	Offset int
+	_type  TokenType
+	value  string
+	offset int
 }
 
 func (token Token) IsType(token_type TokenType) bool {
-	return token.Type == token_type
+	return token._type == token_type
 }
 
-func (token Token) IsSymbol(symbol Symbol) bool {
-	return token.IsType(TOKEN_SYMBOL) && token.Value == string(symbol)
+func (token Token) Value() string {
+	return token.value
 }
 
-func (token Token) IsKeyword(keyword Keyword) bool {
-	return token.IsType(TOKEN_KEYWORD) && token.Value == string(keyword)
+func (token Token) Offset() int {
+	return token.offset
 }
 
 type Lexer struct {
@@ -123,16 +119,19 @@ func (lexer *Lexer) NextToken() (Token, bool) {
 			continue
 		}
 
-		switch Symbol(char) {
+		switch char {
 		case SYMBOL_EOF:
 			return Token{TOKEN_EOF, "", lexer.index}, false
-		case
-			SYMBOL_SEMI_COLON,
-			SYMBOL_COMMA,
-			SYMBOL_LEFT_PAREN,
-			SYMBOL_RIGHT_PAREN,
-			SYMBOL_ASTERISK:
-			return Token{TOKEN_SYMBOL, string(char), lexer.index}, false
+		case SYMBOL_SEMI_COLON:
+			return Token{TOKEN_SEMI_COLON, "", lexer.index}, false
+		case SYMBOL_COMMA:
+			return Token{TOKEN_COMMA, "", lexer.index}, false
+		case SYMBOL_LEFT_PAREN:
+			return Token{TOKEN_LEFT_PAREN, "", lexer.index}, false
+		case SYMBOL_RIGHT_PAREN:
+			return Token{TOKEN_RIGHT_PAREN, "", lexer.index}, false
+		case SYMBOL_ASTERISK:
+			return Token{TOKEN_ASTERISK, "", lexer.index}, false
 		case SYMBOL_SINGLE_QUOTE:
 			token := lexer.lex_text()
 			return token, false
@@ -197,7 +196,7 @@ func (lexer *Lexer) lex_number() Token {
 		return Token{TOKEN_ERROR, "Invalid number literal", lexer.start}
 	}
 
-	return Token{TOKEN_NUMBER_LITERAL, lexer.source[lexer.start : lexer.index+1], lexer.start}
+	return Token{TOKEN_LITERAL_NUMBER, lexer.source[lexer.start : lexer.index+1], lexer.start}
 }
 
 func (lexer *Lexer) lex_text() Token {
@@ -209,7 +208,7 @@ func (lexer *Lexer) lex_text() Token {
 		char := lexer.next_rune()
 
 		if char == rune(SYMBOL_SINGLE_QUOTE) {
-			return Token{TOKEN_TEXT_LITERAL, lexer.source[lexer.start+1 : lexer.index], lexer.start}
+			return Token{TOKEN_LITERAL_TEXT, lexer.source[lexer.start+1 : lexer.index], lexer.start}
 		}
 	}
 
@@ -232,17 +231,17 @@ func (lexer *Lexer) lex_keyword_or_identifier() Token {
 	char := rune(lexer.source[lexer.start])
 	switch to_upper_rune(char) {
 	case 'B':
-		return lexer.check_keyword(1, 6, "OOLEAN")
+		return lexer.check_keyword(1, 6, "OOLEAN", TOKEN_KEYWORD_BOOLEAN)
 	case 'C':
-		return lexer.check_keyword(1, 5, "REATE")
+		return lexer.check_keyword(1, 5, "REATE", TOKEN_KEYWORD_CREATE)
 	case 'F':
 		if lexer.index-lexer.start > 1 {
 			char = rune(lexer.source[lexer.start+1])
 			switch to_upper_rune(char) {
 			case 'A':
-				return lexer.check_keyword(2, 3, "LSE")
+				return lexer.check_keyword(2, 3, "LSE", TOKEN_KEYWORD_FALSE)
 			case 'R':
-				return lexer.check_keyword(2, 2, "OM")
+				return lexer.check_keyword(2, 2, "OM", TOKEN_KEYWORD_FROM)
 			}
 		}
 	case 'I':
@@ -254,38 +253,38 @@ func (lexer *Lexer) lex_keyword_or_identifier() Token {
 					char = rune(lexer.source[lexer.start+2])
 					switch to_upper_rune(char) {
 					case 'S':
-						return lexer.check_keyword(3, 3, "ERT")
+						return lexer.check_keyword(3, 3, "ERT", TOKEN_KEYWORD_INSERT)
 					case 'T':
-						return lexer.check_keyword(3, 1, "O")
+						return lexer.check_keyword(3, 1, "O", TOKEN_KEYWORD_INTO)
 					}
 				}
 			}
 		}
 	case 'N':
-		return lexer.check_keyword(1, 5, "UMBER")
+		return lexer.check_keyword(1, 5, "UMBER", TOKEN_KEYWORD_NUMBER)
 	case 'S':
-		return lexer.check_keyword(1, 5, "ELECT")
+		return lexer.check_keyword(1, 5, "ELECT", TOKEN_KEYWORD_SELECT)
 	case 'T':
 		if lexer.index-lexer.start > 1 {
 			char = rune(lexer.source[lexer.start+1])
 			switch to_upper_rune(char) {
 			case 'A':
-				return lexer.check_keyword(2, 3, "BLE")
+				return lexer.check_keyword(2, 3, "BLE", TOKEN_KEYWORD_TABLE)
 			case 'E':
-				return lexer.check_keyword(2, 2, "XT")
+				return lexer.check_keyword(2, 2, "XT", TOKEN_KEYWORD_TEXT)
 			case 'R':
-				return lexer.check_keyword(2, 2, "UE")
+				return lexer.check_keyword(2, 2, "UE", TOKEN_KEYWORD_TRUE)
 			}
 		}
 	case 'V':
-		return lexer.check_keyword(1, 5, "ALUES")
+		return lexer.check_keyword(1, 5, "ALUES", TOKEN_KEYWORD_VALUES)
 	}
 
 	token := Token{TOKEN_IDENTIFIER, lexer.source[lexer.start : lexer.index+1], lexer.start}
 	return token
 }
 
-func (lexer *Lexer) check_keyword(start int, length int, suffix string) Token {
+func (lexer *Lexer) check_keyword(start int, length int, suffix string, token_type TokenType) Token {
 	if lexer.index+1-lexer.start == start+length {
 		for i, keyword_char := range suffix {
 			char := to_upper_rune(rune(lexer.source[lexer.start+start+i]))
@@ -293,7 +292,7 @@ func (lexer *Lexer) check_keyword(start int, length int, suffix string) Token {
 				break
 			}
 		}
-		return Token{TOKEN_KEYWORD, strings.ToUpper(lexer.source[lexer.start : lexer.index+1]), lexer.start}
+		return Token{token_type, "", lexer.start}
 	}
 	return Token{TOKEN_IDENTIFIER, lexer.source[lexer.start : lexer.index+1], lexer.start}
 }

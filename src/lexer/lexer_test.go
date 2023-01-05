@@ -1,7 +1,6 @@
 package lexer
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -25,11 +24,10 @@ func GenerateTokenSlice(source string) []Token {
 }
 
 func TestLexSymbol(t *testing.T) {
-	tokens := GenerateTokenSlice(",()*")
+	tokens := GenerateTokenSlice(";,( )*")
 	expected := []Token{
-		{TOKEN_SYMBOL, ",", 0}, {TOKEN_SYMBOL, "(", 1},
-		{TOKEN_SYMBOL, ")", 2}, {TOKEN_SYMBOL, "*", 3},
-		{TOKEN_EOF, "", 4},
+		{TOKEN_SEMI_COLON, "", 0}, {TOKEN_COMMA, "", 1}, {TOKEN_LEFT_PAREN, "", 2},
+		{TOKEN_RIGHT_PAREN, "", 4}, {TOKEN_ASTERISK, "", 5}, {TOKEN_EOF, "", 6},
 	}
 
 	assert.Equal(t, expected, tokens)
@@ -48,9 +46,9 @@ func TestLexSymbolErrors(t *testing.T) {
 func TestLexNumber(t *testing.T) {
 	tokens := GenerateTokenSlice("1 2.34 500 06 07.80 .9 1.")
 	expected := []Token{
-		{TOKEN_NUMBER_LITERAL, "1", 0}, {TOKEN_NUMBER_LITERAL, "2.34", 2}, {TOKEN_NUMBER_LITERAL, "500", 7},
-		{TOKEN_NUMBER_LITERAL, "06", 11}, {TOKEN_NUMBER_LITERAL, "07.80", 14}, {TOKEN_NUMBER_LITERAL, ".9", 20},
-		{TOKEN_NUMBER_LITERAL, "1.", 23}, {TOKEN_EOF, "", 25},
+		{TOKEN_LITERAL_NUMBER, "1", 0}, {TOKEN_LITERAL_NUMBER, "2.34", 2}, {TOKEN_LITERAL_NUMBER, "500", 7},
+		{TOKEN_LITERAL_NUMBER, "06", 11}, {TOKEN_LITERAL_NUMBER, "07.80", 14}, {TOKEN_LITERAL_NUMBER, ".9", 20},
+		{TOKEN_LITERAL_NUMBER, "1.", 23}, {TOKEN_EOF, "", 25},
 	}
 
 	assert.Equal(t, expected, tokens)
@@ -68,8 +66,8 @@ func TestLexNumberErrors(t *testing.T) {
 func TestLexText(t *testing.T) {
 	tokens := GenerateTokenSlice("'a' 'b12' 'cd3_4ef' ';,()*.'")
 	expected := []Token{
-		{TOKEN_TEXT_LITERAL, "a", 0}, {TOKEN_TEXT_LITERAL, "b12", 4},
-		{TOKEN_TEXT_LITERAL, "cd3_4ef", 10}, {TOKEN_TEXT_LITERAL, ";,()*.", 20},
+		{TOKEN_LITERAL_TEXT, "a", 0}, {TOKEN_LITERAL_TEXT, "b12", 4},
+		{TOKEN_LITERAL_TEXT, "cd3_4ef", 10}, {TOKEN_LITERAL_TEXT, ";,()*.", 20},
 		{TOKEN_EOF, "", 28},
 	}
 
@@ -83,22 +81,40 @@ func TestLexTextErrors(t *testing.T) {
 	assert.Equal(t, expected, tokens)
 }
 
-func TestLexKeyword(t *testing.T) {
-	for _, keyword := range []string{"CREATE", "create", "TABLE", "taBlE", "NUMBER", "TEXT", "BOOLEAN", "INSERT", "insert", "INTO",
-		"VALUES", "ValueS", "TRUE", "FALSE", "faLse", "SELECT", "select", "FROM"} {
-		tokens := GenerateTokenSlice(keyword)
-		expected := []Token{{TOKEN_KEYWORD, strings.ToUpper(keyword), 0}, {TOKEN_EOF, "", len(keyword)}}
-
-		assert.Equal(t, expected, tokens)
+func TestLexKeywordUpper(t *testing.T) {
+	tokens := GenerateTokenSlice("BOOLEAN CREATE FALSE FROM INSERT INTO NUMBER SELECT TABLE TEXT TRUE VALUES")
+	expected := []Token{
+		{TOKEN_KEYWORD_BOOLEAN, "", 0}, {TOKEN_KEYWORD_CREATE, "", 8}, {TOKEN_KEYWORD_FALSE, "", 15},
+		{TOKEN_KEYWORD_FROM, "", 21}, {TOKEN_KEYWORD_INSERT, "", 26}, {TOKEN_KEYWORD_INTO, "", 33},
+		{TOKEN_KEYWORD_NUMBER, "", 38}, {TOKEN_KEYWORD_SELECT, "", 45}, {TOKEN_KEYWORD_TABLE, "", 52},
+		{TOKEN_KEYWORD_TEXT, "", 58}, {TOKEN_KEYWORD_TRUE, "", 63}, {TOKEN_KEYWORD_VALUES, "", 68},
+		{TOKEN_EOF, "", 74},
 	}
+
+	assert.Equal(t, expected, tokens)
 }
 
-func TestLexKeywords(t *testing.T) {
-	tokens := GenerateTokenSlice("create CREATE inSeRt InSERT")
+func TestLexKeywordLower(t *testing.T) {
+	tokens := GenerateTokenSlice("boolean create false from insert into number select table text true values")
 	expected := []Token{
-		{TOKEN_KEYWORD, "CREATE", 0}, {TOKEN_KEYWORD, "CREATE", 7},
-		{TOKEN_KEYWORD, "INSERT", 14}, {TOKEN_KEYWORD, "INSERT", 21},
-		{TOKEN_EOF, "", 27},
+		{TOKEN_KEYWORD_BOOLEAN, "", 0}, {TOKEN_KEYWORD_CREATE, "", 8}, {TOKEN_KEYWORD_FALSE, "", 15},
+		{TOKEN_KEYWORD_FROM, "", 21}, {TOKEN_KEYWORD_INSERT, "", 26}, {TOKEN_KEYWORD_INTO, "", 33},
+		{TOKEN_KEYWORD_NUMBER, "", 38}, {TOKEN_KEYWORD_SELECT, "", 45}, {TOKEN_KEYWORD_TABLE, "", 52},
+		{TOKEN_KEYWORD_TEXT, "", 58}, {TOKEN_KEYWORD_TRUE, "", 63}, {TOKEN_KEYWORD_VALUES, "", 68},
+		{TOKEN_EOF, "", 74},
+	}
+
+	assert.Equal(t, expected, tokens)
+}
+
+func TestLexKeywordMixed(t *testing.T) {
+	tokens := GenerateTokenSlice("boOLEan Create falsE fRom INSERt InTo nUmbeR SEleCt taBle TExT trUE vAlUeS")
+	expected := []Token{
+		{TOKEN_KEYWORD_BOOLEAN, "", 0}, {TOKEN_KEYWORD_CREATE, "", 8}, {TOKEN_KEYWORD_FALSE, "", 15},
+		{TOKEN_KEYWORD_FROM, "", 21}, {TOKEN_KEYWORD_INSERT, "", 26}, {TOKEN_KEYWORD_INTO, "", 33},
+		{TOKEN_KEYWORD_NUMBER, "", 38}, {TOKEN_KEYWORD_SELECT, "", 45}, {TOKEN_KEYWORD_TABLE, "", 52},
+		{TOKEN_KEYWORD_TEXT, "", 58}, {TOKEN_KEYWORD_TRUE, "", 63}, {TOKEN_KEYWORD_VALUES, "", 68},
+		{TOKEN_EOF, "", 74},
 	}
 
 	assert.Equal(t, expected, tokens)
@@ -119,10 +135,10 @@ func TestLexIdentifiers(t *testing.T) {
 func TestLexCreateTable(t *testing.T) {
 	tokens := GenerateTokenSlice("CREATE TABLE t (c_1 NUMBER, c_2 TEXT);")
 	expected := []Token{
-		{TOKEN_KEYWORD, "CREATE", 0}, {TOKEN_KEYWORD, "TABLE", 7}, {TOKEN_IDENTIFIER, "t", 13},
-		{TOKEN_SYMBOL, "(", 15}, {TOKEN_IDENTIFIER, "c_1", 16}, {TOKEN_KEYWORD, "NUMBER", 20},
-		{TOKEN_SYMBOL, ",", 26}, {TOKEN_IDENTIFIER, "c_2", 28}, {TOKEN_KEYWORD, "TEXT", 32},
-		{TOKEN_SYMBOL, ")", 36}, {TOKEN_SYMBOL, ";", 37}, {TOKEN_EOF, "", 38},
+		{TOKEN_KEYWORD_CREATE, "", 0}, {TOKEN_KEYWORD_TABLE, "", 7}, {TOKEN_IDENTIFIER, "t", 13},
+		{TOKEN_LEFT_PAREN, "", 15}, {TOKEN_IDENTIFIER, "c_1", 16}, {TOKEN_KEYWORD_NUMBER, "", 20},
+		{TOKEN_COMMA, "", 26}, {TOKEN_IDENTIFIER, "c_2", 28}, {TOKEN_KEYWORD_TEXT, "", 32},
+		{TOKEN_RIGHT_PAREN, "", 36}, {TOKEN_SEMI_COLON, "", 37}, {TOKEN_EOF, "", 38},
 	}
 
 	assert.Equal(t, expected, tokens)
@@ -131,10 +147,10 @@ func TestLexCreateTable(t *testing.T) {
 func TestLexInsertInto(t *testing.T) {
 	tokens := GenerateTokenSlice("insert into t values (c_1 10.5, c_2 'Hello $ % !');")
 	expected := []Token{
-		{TOKEN_KEYWORD, "INSERT", 0}, {TOKEN_KEYWORD, "INTO", 7}, {TOKEN_IDENTIFIER, "t", 12},
-		{TOKEN_KEYWORD, "VALUES", 14}, {TOKEN_SYMBOL, "(", 21}, {TOKEN_IDENTIFIER, "c_1", 22},
-		{TOKEN_NUMBER_LITERAL, "10.5", 26}, {TOKEN_SYMBOL, ",", 30}, {TOKEN_IDENTIFIER, "c_2", 32},
-		{TOKEN_TEXT_LITERAL, "Hello $ % !", 36}, {TOKEN_SYMBOL, ")", 49}, {TOKEN_SYMBOL, ";", 50},
+		{TOKEN_KEYWORD_INSERT, "", 0}, {TOKEN_KEYWORD_INTO, "", 7}, {TOKEN_IDENTIFIER, "t", 12},
+		{TOKEN_KEYWORD_VALUES, "", 14}, {TOKEN_LEFT_PAREN, "", 21}, {TOKEN_IDENTIFIER, "c_1", 22},
+		{TOKEN_LITERAL_NUMBER, "10.5", 26}, {TOKEN_COMMA, "", 30}, {TOKEN_IDENTIFIER, "c_2", 32},
+		{TOKEN_LITERAL_TEXT, "Hello $ % !", 36}, {TOKEN_RIGHT_PAREN, "", 49}, {TOKEN_SEMI_COLON, "", 50},
 		{TOKEN_EOF, "", 51},
 	}
 
@@ -144,9 +160,9 @@ func TestLexInsertInto(t *testing.T) {
 func TestLexSelect(t *testing.T) {
 	tokens := GenerateTokenSlice("SELECT c_1, c_2 FROM t;")
 	expected := []Token{
-		{TOKEN_KEYWORD, "SELECT", 0}, {TOKEN_IDENTIFIER, "c_1", 7}, {TOKEN_SYMBOL, ",", 10},
-		{TOKEN_IDENTIFIER, "c_2", 12}, {TOKEN_KEYWORD, "FROM", 16}, {TOKEN_IDENTIFIER, "t", 21},
-		{TOKEN_SYMBOL, ";", 22}, {TOKEN_EOF, "", 23},
+		{TOKEN_KEYWORD_SELECT, "", 0}, {TOKEN_IDENTIFIER, "c_1", 7}, {TOKEN_COMMA, "", 10},
+		{TOKEN_IDENTIFIER, "c_2", 12}, {TOKEN_KEYWORD_FROM, "", 16}, {TOKEN_IDENTIFIER, "t", 21},
+		{TOKEN_SEMI_COLON, "", 22}, {TOKEN_EOF, "", 23},
 	}
 
 	assert.Equal(t, expected, tokens)
@@ -155,8 +171,8 @@ func TestLexSelect(t *testing.T) {
 func TestLexSelectStar(t *testing.T) {
 	tokens := GenerateTokenSlice("SELECT * FROM t;")
 	expected := []Token{
-		{TOKEN_KEYWORD, "SELECT", 0}, {TOKEN_SYMBOL, "*", 7}, {TOKEN_KEYWORD, "FROM", 9},
-		{TOKEN_IDENTIFIER, "t", 14}, {TOKEN_SYMBOL, ";", 15}, {TOKEN_EOF, "", 16},
+		{TOKEN_KEYWORD_SELECT, "", 0}, {TOKEN_ASTERISK, "", 7}, {TOKEN_KEYWORD_FROM, "", 9},
+		{TOKEN_IDENTIFIER, "t", 14}, {TOKEN_SEMI_COLON, "", 15}, {TOKEN_EOF, "", 16},
 	}
 
 	assert.Equal(t, expected, tokens)

@@ -34,7 +34,7 @@ func (parser *Parser) Parse() []Statement {
 		parser.advance()
 		statement := parser.parse_statement()
 		statements = append(statements, statement)
-		parser.consume_symbol(lex.SYMBOL_SEMI_COLON, "Expected semi colon at end of statement")
+		parser.consume_token(lex.TOKEN_SEMI_COLON, "Expected semi colon at end of statement")
 	}
 
 	return statements
@@ -55,8 +55,8 @@ func (parser *Parser) advance() {
 	}
 }
 
-func (parser *Parser) match_keyword(keyword lex.Keyword) bool {
-	if parser.current.IsKeyword(keyword) {
+func (parser *Parser) match_token(token_type lex.TokenType) bool {
+	if parser.current.IsType(token_type) {
 		parser.advance()
 		return true
 	}
@@ -64,35 +64,8 @@ func (parser *Parser) match_keyword(keyword lex.Keyword) bool {
 	return false
 }
 
-func (parser *Parser) match_token(_type lex.TokenType) bool {
-	if parser.current.IsType(_type) {
-		parser.advance()
-		return true
-	}
-
-	return false
-}
-
-func (parser *Parser) match_symbol(symbol lex.Symbol) bool {
-	if parser.current.IsSymbol(symbol) {
-		parser.advance()
-		return true
-	}
-
-	return false
-}
-
-func (parser *Parser) consume_token(_type lex.TokenType, message string) {
-	if parser.current.IsType(_type) {
-		parser.advance()
-		return
-	}
-
-	panic(message)
-}
-
-func (parser *Parser) consume_symbol(symbol lex.Symbol, message string) {
-	if parser.current.IsSymbol(symbol) {
+func (parser *Parser) consume_token(token_type lex.TokenType, message string) {
+	if parser.current.IsType(token_type) {
 		parser.advance()
 		return
 	}
@@ -102,7 +75,7 @@ func (parser *Parser) consume_symbol(symbol lex.Symbol, message string) {
 
 func (parser *Parser) parse_statement() Statement {
 	var statement Statement
-	if parser.match_keyword(lex.KEYWORD_CREATE) {
+	if parser.match_token(lex.TOKEN_KEYWORD_CREATE) {
 		statement = parser.parse_create_statement()
 	}
 
@@ -110,7 +83,7 @@ func (parser *Parser) parse_statement() Statement {
 }
 
 func (parser *Parser) parse_create_statement() Statement {
-	if parser.match_keyword(lex.KEYWORD_TABLE) {
+	if parser.match_token(lex.TOKEN_KEYWORD_TABLE) {
 		content := parser.parse_create_table_statement()
 		return Statement{&content}
 	}
@@ -130,28 +103,27 @@ func (parser *Parser) parse_create_table_statement() CreateTableStatement {
 func (parser *Parser) parse_column_definitions() []ColumnDefinition {
 	var definitions []ColumnDefinition
 
-	parser.consume_symbol(lex.SYMBOL_LEFT_PAREN, "Expected '('")
+	parser.consume_token(lex.TOKEN_LEFT_PAREN, "Expected '('")
 	for {
 		if !parser.match_token(lex.TOKEN_IDENTIFIER) {
 			panic("Expected identifier")
 		}
 		column_name_token := parser.previous
 
-		parser.consume_token(lex.TOKEN_KEYWORD, "Expected keyword")
-		value := lex.Keyword(parser.previous.Value)
-		if !(value == lex.KEYWORD_TEXT || value == lex.KEYWORD_BOOLEAN || value == lex.KEYWORD_NUMBER) {
+		parser.advance()
+		column_type_token := parser.previous
+		if !(column_type_token.IsType(lex.TOKEN_KEYWORD_BOOLEAN) || column_type_token.IsType(lex.TOKEN_KEYWORD_NUMBER) || column_type_token.IsType(lex.TOKEN_KEYWORD_TEXT)) {
 			panic("Expected Type")
 		}
-		column_type_token := parser.previous
 
 		definition := ColumnDefinition{column_name_token, column_type_token}
 		definitions = append(definitions, definition)
 
-		if parser.match_symbol(lex.SYMBOL_COMMA) {
+		if parser.match_token(lex.TOKEN_COMMA) {
 			continue
 		}
 
-		if parser.match_symbol(lex.SYMBOL_RIGHT_PAREN) {
+		if parser.match_token(lex.TOKEN_RIGHT_PAREN) {
 			break
 		}
 

@@ -45,10 +45,6 @@ func do_sql_command(command string) {
 	parser := parser.NewParser(command)
 	statements := parser.Parse()
 
-	fmt.Println()
-	fmt.Println("----------")
-	fmt.Println()
-
 	for _, statement := range statements {
 		fmt.Println(statement.Content)
 	}
