@@ -84,8 +84,20 @@ type Token struct {
 	offset int
 }
 
-func (token Token) IsType(token_type TokenType) bool {
+func MakeToken(_type TokenType, value string, offset int) Token {
+	return Token{_type, value, offset}
+}
+
+func (token Token) IsTokenType(token_type TokenType) bool {
 	return token._type == token_type
+}
+
+func (token Token) IsDataType() bool {
+	return token._type == TOKEN_KEYWORD_BOOLEAN || token._type == TOKEN_KEYWORD_NUMBER || token._type == TOKEN_KEYWORD_TEXT
+}
+
+func (token Token) IsValueType() bool {
+	return token._type == TOKEN_LITERAL_NUMBER || token._type == TOKEN_LITERAL_TEXT || token._type == TOKEN_KEYWORD_FALSE || token._type == TOKEN_KEYWORD_TRUE
 }
 
 func (token Token) Value() string {
@@ -101,6 +113,10 @@ type Lexer struct {
 	source_length int
 	index         int
 	start         int
+}
+
+func (lexer *Lexer) CurrentIndex() int {
+	return lexer.index
 }
 
 func NewLexer(source string) *Lexer {

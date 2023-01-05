@@ -1,6 +1,6 @@
 package parser
 
-import "github.com/JamesErrington/tasiadb/src/lexer"
+import lex "github.com/JamesErrington/tasiadb/src/lexer"
 
 type NodeType int8
 
@@ -9,6 +9,8 @@ const (
 	NODE_TEXT_VALUE
 	NODE_BOOLEAN_VALUE
 	NODE_CREATE_TABLE_STATEMENT
+	NODE_INSERT_STATEMENT
+	NODE_SELECT_STATEMENT
 )
 
 type Node interface {
@@ -25,27 +27,43 @@ func (s *Statement) Pos() int {
 
 type CreateTableStatement struct {
 	_type       NodeType
-	create      int
-	table_name  lexer.Token
+	start       int
+	table_name  lex.Token
 	column_defs []ColumnDefinition
 }
 
 func (s *CreateTableStatement) Pos() int {
-	return s.create
+	return s.start
 }
 
 type InsertStatement struct {
 	_type      NodeType
-	table_name lexer.Token
+	start      int
+	table_name lex.Token
 	values     []ColumnValue
 }
 
+func (s *InsertStatement) Pos() int {
+	return s.start
+}
+
+type SelectStatement struct {
+	_type      NodeType
+	start      int
+	columns    []lex.Token
+	table_name lex.Token
+}
+
+func (s *SelectStatement) Pos() int {
+	return s.start
+}
+
 type ColumnDefinition struct {
-	colum_name  lexer.Token
-	column_type lexer.Token
+	colum_name  lex.Token
+	column_type lex.Token
 }
 
 type ColumnValue struct {
-	column_name  lexer.Token
-	column_value lexer.Token
+	column_name  lex.Token
+	column_value lex.Token
 }
