@@ -31,16 +31,15 @@ func (parser *Parser) Parse() []Statement {
 
 	var statements []Statement
 
+	parser.start = 0
+	parser.advance()
 	for !parser.current.IsTokenType(lex.TOKEN_EOF) {
-		parser.start = parser.lexer.CurrentIndex()
-		if parser.start < 0 {
-			parser.start = 0
-		}
 
-		parser.advance()
 		statement := parser.parse_statement()
 		statements = append(statements, statement)
+
 		parser.consume_token(lex.TOKEN_SEMI_COLON, "Expected semi colon at end of statement")
+		parser.start = parser.lexer.StartIndex()
 	}
 
 	return statements
@@ -110,20 +109,21 @@ func (parser *Parser) parse_create_table_statement() CreateTableStatement {
 	parser.consume_token(lex.TOKEN_IDENTIFIER, "Expected identifier")
 	table_name_token := parser.previous
 
-	definitions := parser.parse_column_definitions()
+	column_names, column_types := parser.parse_column_definitions()
 
-	return CreateTableStatement{NODE_CREATE_TABLE_STATEMENT, parser.start, table_name_token, definitions}
+	return CreateTableStatement{NODE_CREATE_TABLE_STATEMENT, parser.start, table_name_token, column_names, column_types}
 }
 
-func (parser *Parser) parse_column_definitions() []ColumnDefinition {
-	var definitions []ColumnDefinition
+func (parser *Parser) parse_column_definitions() ([]lex.Token, []lex.Token) {
+	var column_names []lex.Token
+	var column_types []lex.Token
 
 	parser.consume_token(lex.TOKEN_LEFT_PAREN, "Expected '('")
 	for {
 		if !parser.match_token(lex.TOKEN_IDENTIFIER) {
 			panic("Expected identifier")
 		}
-		column_name_token := parser.previous
+		column_names = append(column_names, parser.previous)
 
 		parser.advance()
 		column_type_token := parser.previous
@@ -131,8 +131,7 @@ func (parser *Parser) parse_column_definitions() []ColumnDefinition {
 			panic("Expected Type")
 		}
 
-		definition := ColumnDefinition{column_name_token, column_type_token}
-		definitions = append(definitions, definition)
+		column_types = append(column_types, parser.previous)
 
 		if parser.match_token(lex.TOKEN_COMMA) {
 			continue
@@ -145,7 +144,7 @@ func (parser *Parser) parse_column_definitions() []ColumnDefinition {
 		panic("Expected ',' or ')")
 	}
 
-	return definitions
+	return column_names, column_types
 }
 
 func (parser *Parser) parse_insert_statement() Statement {
@@ -154,16 +153,31 @@ func (parser *Parser) parse_insert_statement() Statement {
 	parser.consume_token(lex.TOKEN_IDENTIFIER, "Expected identifier")
 	table_name_token := parser.previous
 
+	var column_names []lex.Token
+
+	if parser.match_token(lex.TOKEN_LEFT_PAREN) {
+		for {
+			parser.consume_token(lex.TOKEN_IDENTIFIER, "Expected identifier")
+			column_names = append(column_names, parser.previous)
+
+			if parser.match_token(lex.TOKEN_COMMA) {
+				continue
+			}
+
+			if parser.match_token(lex.TOKEN_RIGHT_PAREN) {
+				break
+			}
+
+			panic("Expected ',' or ')")
+		}
+	}
+
 	parser.consume_token(lex.TOKEN_KEYWORD_VALUES, "Expected VALUES")
 
-	var values []ColumnValue
+	var column_values []lex.Token
 
 	parser.consume_token(lex.TOKEN_LEFT_PAREN, "Expected '('")
 	for {
-		if !parser.match_token(lex.TOKEN_IDENTIFIER) {
-			panic("Expected identifier")
-		}
-		column_name_token := parser.previous
 
 		parser.advance()
 		column_value_token := parser.previous
@@ -171,7 +185,7 @@ func (parser *Parser) parse_insert_statement() Statement {
 			panic("Expected Type")
 		}
 
-		values = append(values, ColumnValue{column_name_token, column_value_token})
+		column_values = append(column_values, column_value_token)
 
 		if parser.match_token(lex.TOKEN_COMMA) {
 			continue
@@ -184,7 +198,7 @@ func (parser *Parser) parse_insert_statement() Statement {
 		panic("Expected ',' or ')")
 	}
 
-	content := InsertStatement{NODE_INSERT_STATEMENT, parser.start, table_name_token, values}
+	content := InsertStatement{NODE_INSERT_STATEMENT, parser.start, table_name_token, column_names, column_values}
 	return Statement{&content}
 }
 

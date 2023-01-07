@@ -26,10 +26,11 @@ func (s *Statement) Pos() int {
 }
 
 type CreateTableStatement struct {
-	_type       NodeType
-	start       int
-	table_name  lex.Token
-	column_defs []ColumnDefinition
+	_type        NodeType
+	start        int
+	table_name   lex.Token
+	column_names []lex.Token
+	column_types []lex.Token
 }
 
 func (s *CreateTableStatement) Pos() int {
@@ -37,10 +38,11 @@ func (s *CreateTableStatement) Pos() int {
 }
 
 type InsertStatement struct {
-	_type      NodeType
-	start      int
-	table_name lex.Token
-	values     []ColumnValue
+	_type         NodeType
+	start         int
+	table_name    lex.Token
+	column_names  []lex.Token
+	column_values []lex.Token
 }
 
 func (s *InsertStatement) Pos() int {
@@ -56,14 +58,4 @@ type SelectStatement struct {
 
 func (s *SelectStatement) Pos() int {
 	return s.start
-}
-
-type ColumnDefinition struct {
-	colum_name  lex.Token
-	column_type lex.Token
-}
-
-type ColumnValue struct {
-	column_name  lex.Token
-	column_value lex.Token
 }

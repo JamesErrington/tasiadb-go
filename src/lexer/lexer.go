@@ -115,8 +115,8 @@ type Lexer struct {
 	start         int
 }
 
-func (lexer *Lexer) CurrentIndex() int {
-	return lexer.index
+func (lexer *Lexer) StartIndex() int {
+	return lexer.start
 }
 
 func NewLexer(source string) *Lexer {
